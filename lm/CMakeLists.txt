@@ -42,18 +42,18 @@ add_subdirectory(builder)
 add_subdirectory(filter)
 add_subdirectory(interpolate)
 
-# Explicitly list the executable files to be compiled
-set(EXE_LIST
-  query
-  fragment
-  # build_binary
-  kenlm_benchmark
-  )
+# # Explicitly list the executable files to be compiled
+# set(EXE_LIST
+#   query
+#   fragment
+#   build_binary
+#   kenlm_benchmark
+#   )
 
-set(LM_LIBS kenlm kenlm_util Threads::Threads)
+# set(LM_LIBS kenlm kenlm_util Threads::Threads)
 
-AddExes(EXES ${EXE_LIST}
-        LIBRARIES ${LM_LIBS})
+# AddExes(EXES ${EXE_LIST}
+#         LIBRARIES ${LM_LIBS})
 
 if(BUILD_TESTING)
 
