@@ -46,7 +46,7 @@ add_subdirectory(interpolate)
 set(EXE_LIST
   query
   fragment
-  build_binary
+  # build_binary
   kenlm_benchmark
   )
 
