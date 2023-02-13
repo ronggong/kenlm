@@ -27,7 +27,7 @@ find_package(LibLZMA)
 target_link_libraries(
   kenlm
   PRIVATE
-  $<$<BOOL:ZLIB_FOUND>:ZLIB::ZLIB>
+  $<$<BOOL:ZLIB_FOUND>:${ZLIB_LIBRARIES}>
   $<$<BOOL:BZLIB_FOUND>:${BZIP2_LIBRARIES}>
   $<$<BOOL:LIBLZMA_FOUND>:${LIBLZMA_LIBRARIES}>
   )
@@ -35,6 +35,7 @@ target_link_libraries(
 target_include_directories(
   kenlm
   PRIVATE
+  $<$<BOOL:ZLIB_FOUND>:${ZLIB_INCLUDE_DIRS}>
   $<$<BOOL:BZLIB_FOUND>:${BZIP2_INCLUDE_DIR}>
   $<$<BOOL:LIBLZMA_FOUND>:${LIBLZMA_INCLUDE_DIRS}>
   ${PROJECT_SOURCE_DIR}
