@@ -13,7 +13,7 @@ import skbuild
 # See python/BuildStandalone.cmake, which builds Python libs
 setup(
     name="kenlm",
-    cmake_args=['-DBUILD_PYTHON_STANDALONE:BOOL=ON'],
+    cmake_args=['-DBUILD_PYTHON_STANDALONE:BOOL=ON', "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON"],
     packages=['kenlm'],
     package_dir={"kenlm": ""},
 )
