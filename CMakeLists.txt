@@ -28,7 +28,7 @@ if (BUILD_PYTHON_STANDALONE)
   # Build a shared lib artifact in the same way the cpython setup.py builds
   # and return. That lib can be dlopened by other Python packages that need
   # cpp artifacts and can't use the bits compiled by setuptools Extension
-  include(${CMAKE_CURRENT_LIST_DIR}/python/BuildStandalone.cmake)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/python)
   return()
 endif()
 

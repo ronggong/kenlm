@@ -1,3 +1,3 @@
 [build-system]
-requires = ["setuptools", "wheel", "cmake", "scikit-build>=0.13"]
+requires = ["setuptools", "cython", "wheel", "cmake", "scikit-build>=0.13"]
 build-backend = "setuptools.build_meta"
