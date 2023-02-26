@@ -54,7 +54,7 @@ add_library(kenlm MODULE ${PROJECT_SOURCE_DIR}/python/kenlm.cpp)
 set_target_properties(
   kenlm
   PROPERTIES
-  OUTPUT_NAME "_kenlm"
+  OUTPUT_NAME "kenlm"
 )
 
 
