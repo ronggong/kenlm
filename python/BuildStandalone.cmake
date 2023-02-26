@@ -75,7 +75,8 @@ python_extension_module(kenlm)
 # find_package(Cython REQUIRED)
 # add_cython_target(${PROJECT_SOURCE_DIR}/python/kenlm.pyx)
 
-install(TARGETS kenlm_lib kenlm DESTINATION ${PYTHON_RELATIVE_SITE_PACKAGES_DIR})
+install(TARGETS kenlm_lib DESTINATION ${PYTHON_RELATIVE_SITE_PACKAGES_DIR})
+install(TARGETS kenlm DESTINATION ${PYTHON_RELATIVE_SITE_PACKAGES_DIR}/kenlm)
 # install(FILES ${PROJECT_SOURCE_DIR}/python/__init__.py DESTINATION ${PYTHON_RELATIVE_SITE_PACKAGES_DIR}/kenlm)
 
 # rpath setting to make sure the python binding library finds
