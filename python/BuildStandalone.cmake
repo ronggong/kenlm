@@ -50,6 +50,14 @@ set_target_properties(
 # Build the Python library
 add_library(kenlm MODULE ${PROJECT_SOURCE_DIR}/python/kenlm.cpp)
 
+# set output name of the kenlm_lib --> kenlm
+set_target_properties(
+  kenlm
+  PROPERTIES
+  OUTPUT_NAME "_kenlm"
+)
+
+
 target_link_libraries(kenlm kenlm_lib)
 target_include_directories(kenlm PRIVATE ${PROJECT_SOURCE_DIR})
 target_compile_definitions(kenlm PRIVATE KENLM_MAX_ORDER=${KENLM_MAX_ORDER})
