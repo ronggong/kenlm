@@ -85,7 +85,10 @@ set_target_properties(kenlm_util PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(kenlm_util
   PUBLIC
   # Boost is required for building binaries and tests
-  "$<BUILD_INTERFACE:${Boost_LIBRARIES}>"
+  $<BUILD_INTERFACE:Boost::program_options>
+  $<BUILD_INTERFACE:Boost::system>
+  $<BUILD_INTERFACE:Boost::thread>
+  $<BUILD_INTERFACE:Boost::unit_test_framework>
   PRIVATE
   Threads::Threads
   ${RT})

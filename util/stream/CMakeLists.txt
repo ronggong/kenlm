@@ -35,5 +35,11 @@ if(BUILD_TESTING)
   )
 
   AddTests(TESTS ${KENLM_BOOST_TESTS_LIST}
-           LIBRARIES kenlm_util ${Boost_LIBRARIES} Threads::Threads)
+           LIBRARIES
+           kenlm_util
+           Boost::program_options
+           Boost::system
+           Boost::thread
+           Boost::unit_test_framework
+           Threads::Threads)
 endif()
