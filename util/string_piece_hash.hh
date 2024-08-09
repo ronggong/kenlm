@@ -27,7 +27,7 @@ struct StringPieceCompatibleHash : public std::unary_function<const StringPiece 
   }
 };
 
-struct StringPieceCompatibleEquals : public std::binary_function<const StringPiece &, const std::string &, bool> {
+struct StringPieceCompatibleEquals {
   bool operator()(const StringPiece &first, const StringPiece &second) const {
     return first == second;
   }
