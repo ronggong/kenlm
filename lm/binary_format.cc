@@ -12,6 +12,13 @@
 
 #include <stdint.h>
 
+// workaround for kFileFlags symbol not found error in MSVC
+#if defined(_WIN32) || defined(_WIN64)
+namespace util {
+  const int kFileFlags = 0;
+}
+#endif
+
 namespace lm {
 namespace ngram {
 
