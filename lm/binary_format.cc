@@ -121,6 +121,33 @@ bool IsBinaryFormat(int fd) {
   return false;
 }
 
+bool IsBinaryFormat(const void *data, std::size_t size) {
+  if (!data) return false;
+  if (size <= static_cast<std::size_t>(sizeof(Sanity))) return false;
+  const char *bytes = static_cast<const char*>(data);
+
+  Sanity reference_header = Sanity();
+  reference_header.SetToReference();
+  if (!std::memcmp(bytes, &reference_header, sizeof(Sanity))) return true;
+  if (!std::memcmp(bytes, kMagicIncomplete, strlen(kMagicIncomplete))) {
+    UTIL_THROW(FormatLoadException, "This binary file did not finish building");
+  }
+  if (!std::memcmp(bytes, kMagicBeforeVersion, strlen(kMagicBeforeVersion))) {
+    char *end_ptr;
+    const char *begin_version = bytes + strlen(kMagicBeforeVersion);
+    long int version = std::strtol(begin_version, &end_ptr, 10);
+    if ((end_ptr != begin_version) && version != kMagicVersion) {
+      UTIL_THROW(FormatLoadException, "Binary file has version " << version << " but this implementation expects version " << kMagicVersion << " so you'll have to use the ARPA to rebuild your binary");
+    }
+
+    OldSanity old_sanity = OldSanity();
+    old_sanity.SetToReference();
+    UTIL_THROW_IF(!std::memcmp(bytes, &old_sanity, sizeof(OldSanity)), FormatLoadException, "Looks like this is an old 32-bit format.  The old 32-bit format has been removed so that 64-bit and 32-bit files are exchangeable.");
+    UTIL_THROW(FormatLoadException, "File looks like it should be loaded with mmap, but the test values don't match.  Try rebuilding the binary format LM using the same code revision, compiler, and architecture");
+  }
+  return false;
+}
+
 void ReadHeader(int fd, Parameters &out) {
   util::SeekOrThrow(fd, sizeof(Sanity));
   util::ReadOrThrow(fd, &out.fixed, sizeof(out.fixed));
@@ -129,6 +156,29 @@ void ReadHeader(int fd, Parameters &out) {
 
   out.counts.resize(static_cast<std::size_t>(out.fixed.order));
   if (out.fixed.order) util::ReadOrThrow(fd, &*out.counts.begin(), sizeof(uint64_t) * out.fixed.order);
+}
+
+void ReadHeaderFromMemory(const void *data, std::size_t size, Parameters &out) {
+  UTIL_THROW_IF(!data, FormatLoadException, "Null buffer passed to ReadHeaderFromMemory");
+  UTIL_THROW_IF(size < TotalHeaderSize(1), FormatLoadException, "Buffer too small to contain binary header");
+
+  const uint8_t *bytes = static_cast<const uint8_t*>(data);
+  const uint8_t *cursor = bytes + sizeof(Sanity);
+  const uint8_t *end = bytes + size;
+
+  UTIL_THROW_IF(cursor + sizeof(out.fixed) > end, FormatLoadException, "Buffer too small to contain binary header (fixed parameters)");
+  std::memcpy(&out.fixed, cursor, sizeof(out.fixed));
+  cursor += sizeof(out.fixed);
+
+  if (out.fixed.probing_multiplier < 1.0)
+    UTIL_THROW(FormatLoadException, "Binary format claims to have a probing multiplier of " << out.fixed.probing_multiplier << " which is < 1.0.");
+
+  out.counts.resize(static_cast<std::size_t>(out.fixed.order));
+  if (out.fixed.order) {
+    const std::size_t count_bytes = sizeof(uint64_t) * out.fixed.order;
+    UTIL_THROW_IF(cursor + count_bytes > end, FormatLoadException, "Buffer too small to contain binary header (counts)");
+    std::memcpy(&*out.counts.begin(), cursor, count_bytes);
+  }
 }
 
 void MatchCheck(ModelType model_type, unsigned int search_version, const Parameters &params) {
@@ -144,30 +194,55 @@ const std::size_t kInvalidSize = static_cast<std::size_t>(-1);
 
 BinaryFormat::BinaryFormat(const Config &config)
   : write_method_(config.write_method), write_mmap_(config.write_mmap), load_method_(config.load_method),
+    external_data_(NULL), external_size_(0),
     header_size_(kInvalidSize), vocab_size_(kInvalidSize), vocab_string_offset_(kInvalidOffset) {}
 
 void BinaryFormat::InitializeBinary(int fd, ModelType model_type, unsigned int search_version, Parameters &params) {
   file_.reset(fd);
+  external_data_ = NULL;
+  external_size_ = 0;
   write_mmap_ = NULL; // Ignore write requests; this is already in binary format.
   ReadHeader(fd, params);
   MatchCheck(model_type, search_version, params);
   header_size_ = TotalHeaderSize(params.counts.size());
 }
 
+void BinaryFormat::InitializeBinaryFromMemory(const void *data, std::size_t size, ModelType model_type, unsigned int search_version, Parameters &params) {
+  UTIL_THROW_IF(!IsBinaryFormat(data, size), FormatLoadException, "Buffer is not a KenLM binary format");
+  file_.reset(-1);
+  external_data_ = static_cast<const uint8_t*>(data);
+  external_size_ = size;
+  write_mmap_ = NULL; // Ignore write requests; this is already in binary format.
+  ReadHeaderFromMemory(data, size, params);
+  MatchCheck(model_type, search_version, params);
+  header_size_ = TotalHeaderSize(params.counts.size());
+}
+
 void BinaryFormat::ReadForConfig(void *to, std::size_t amount, uint64_t offset_excluding_header) const {
   assert(header_size_ != kInvalidSize);
-  util::ErsatzPRead(file_.get(), to, amount, offset_excluding_header + header_size_);
+  if (external_data_) {
+    const uint64_t offset = offset_excluding_header + header_size_;
+    const uint64_t end = offset + amount;
+    UTIL_THROW_IF(end > external_size_, FormatLoadException, "Binary buffer is too small for requested ReadForConfig");
+    std::memcpy(to, external_data_ + offset, amount);
+  } else {
+    util::ErsatzPRead(file_.get(), to, amount, offset_excluding_header + header_size_);
+  }
 }
 
 void *BinaryFormat::LoadBinary(std::size_t size) {
   assert(header_size_ != kInvalidSize);
-  const uint64_t file_size = util::SizeFile(file_.get());
-  // The header is smaller than a page, so we have to map the whole header as well.
+  // The header is smaller than a page, so we have to map/validate the whole header as well.
   uint64_t total_map = static_cast<uint64_t>(header_size_) + static_cast<uint64_t>(size);
+  if (external_data_) {
+    UTIL_THROW_IF(external_size_ < total_map, FormatLoadException, "Binary buffer has size " << external_size_ << " but the headers say it should be at least " << total_map);
+    vocab_string_offset_ = total_map;
+    return const_cast<uint8_t*>(external_data_) + header_size_;
+  }
+
+  const uint64_t file_size = util::SizeFile(file_.get());
   UTIL_THROW_IF(file_size != util::kBadSize && file_size < total_map, FormatLoadException, "Binary file has size " << file_size << " but the headers say it should be at least " << total_map);
-
   util::MapRead(load_method_, file_.get(), 0, util::CheckOverflow(total_map), mapping_);
-
   vocab_string_offset_ = total_map;
   return reinterpret_cast<uint8_t*>(mapping_.get()) + header_size_;
 }
@@ -301,6 +376,14 @@ bool RecognizeBinary(const char *file, ModelType &recognized) {
   }
   Parameters params;
   ReadHeader(fd.get(), params);
+  recognized = params.fixed.model_type;
+  return true;
+}
+
+bool RecognizeBinary(const void *data, std::size_t size, ModelType &recognized) {
+  if (!IsBinaryFormat(data, size)) return false;
+  Parameters params;
+  ReadHeaderFromMemory(data, size, params);
   recognized = params.fixed.model_type;
   return true;
 }

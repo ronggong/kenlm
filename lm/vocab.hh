@@ -12,6 +12,7 @@
 #include "../util/string_piece.hh"
 
 #include <limits>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -111,6 +112,7 @@ class SortedVocabulary : public base::Vocabulary {
     bool SawUnk() const { return saw_unk_; }
 
     void LoadedBinary(bool have_words, int fd, EnumerateVocab *to, uint64_t offset);
+    void LoadedBinaryFromMemory(bool have_words, const void *data, std::size_t size, EnumerateVocab *to, uint64_t offset);
 
     uint64_t *&EndHack() { return end_; }
 
@@ -190,6 +192,7 @@ class ProbingVocabulary : public base::Vocabulary {
     bool SawUnk() const { return saw_unk_; }
 
     void LoadedBinary(bool have_words, int fd, EnumerateVocab *to, uint64_t offset);
+    void LoadedBinaryFromMemory(bool have_words, const void *data, std::size_t size, EnumerateVocab *to, uint64_t offset);
 
   private:
     void InternalFinishedLoading();

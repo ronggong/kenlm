@@ -52,6 +52,36 @@ void ReadWords(int fd, EnumerateVocab *enumerate, WordIndex expected_count, uint
   UTIL_THROW_IF(expected_count != index, FormatLoadException, "The binary file has the wrong number of words at the end.  This could be caused by a truncated binary file.");
 }
 
+void ReadWordsFromMemory(const void *data, std::size_t size, EnumerateVocab *enumerate, WordIndex expected_count, uint64_t offset) {
+  UTIL_THROW_IF(!data, FormatLoadException, "Null buffer passed to ReadWordsFromMemory");
+  UTIL_THROW_IF(offset + 6 > size, FormatLoadException, "Vocabulary words are out of range in the binary buffer");
+  const uint8_t *bytes = static_cast<const uint8_t*>(data);
+  const uint8_t *cursor = bytes + offset;
+  const uint8_t *end = bytes + size;
+
+  // Check that we're at the right place by reading <unk> which is always first.
+  UTIL_THROW_IF(
+      std::memcmp(cursor, "<unk>", 6),
+      FormatLoadException,
+      "Vocabulary words are in the wrong place.  This could be because the binary file was built with stale gcc and old kenlm.  Stale gcc, including the gcc distributed with RedHat and OS X, has a bug that ignores pragma pack for template-dependent types.  New kenlm works around this, so you'll save memory but have to rebuild any binary files using the probing data structure.");
+
+  if (!enumerate) return;
+  enumerate->Add(0, "<unk>");
+
+  WordIndex index = 1; // Read <unk> already.
+  cursor += 6;
+  while (cursor < end) {
+    const uint8_t *nul = static_cast<const uint8_t*>(std::memchr(cursor, 0, static_cast<std::size_t>(end - cursor)));
+    UTIL_THROW_IF(!nul, FormatLoadException, "The binary file has a truncated vocabulary string table (missing NUL terminator)");
+    // Skip any trailing empty string at the very end.
+    if (nul == cursor && (cursor + 1 == end)) break;
+    enumerate->Add(index, StringPiece(reinterpret_cast<const char*>(cursor), static_cast<std::size_t>(nul - cursor)));
+    ++index;
+    cursor = nul + 1;
+  }
+  UTIL_THROW_IF(expected_count != index, FormatLoadException, "The binary file has the wrong number of words at the end.  This could be caused by a truncated binary file.");
+}
+
 // Constructor ordering madness.
 int SeekAndReturn(int fd, uint64_t start) {
   util::SeekOrThrow(fd, start);
@@ -192,6 +222,13 @@ void SortedVocabulary::LoadedBinary(bool have_words, int fd, EnumerateVocab *to,
   if (have_words) ReadWords(fd, to, bound_, offset);
 }
 
+void SortedVocabulary::LoadedBinaryFromMemory(bool have_words, const void *data, std::size_t size, EnumerateVocab *to, uint64_t offset) {
+  end_ = begin_ + *(reinterpret_cast<const uint64_t*>(begin_) - 1);
+  SetSpecial(Index("<s>"), Index("</s>"), 0);
+  bound_ = end_ - begin_ + 1;
+  if (have_words) ReadWordsFromMemory(data, size, to, bound_, offset);
+}
+
 template <class T> void SortedVocabulary::GenericFinished(T *reorder) {
   if (enumerate_) {
     if (!strings_to_enumerate_.empty()) {
@@ -280,6 +317,13 @@ void ProbingVocabulary::LoadedBinary(bool have_words, int fd, EnumerateVocab *to
   bound_ = header_->bound;
   SetSpecial(Index("<s>"), Index("</s>"), 0);
   if (have_words) ReadWords(fd, to, bound_, offset);
+}
+
+void ProbingVocabulary::LoadedBinaryFromMemory(bool have_words, const void *data, std::size_t size, EnumerateVocab *to, uint64_t offset) {
+  UTIL_THROW_IF(header_->version != kProbingVocabularyVersion, FormatLoadException, "The binary file has probing version " << header_->version << " but the code expects version " << kProbingVocabularyVersion << ".  Please rerun build_binary using the same version of the code.");
+  bound_ = header_->bound;
+  SetSpecial(Index("<s>"), Index("</s>"), 0);
+  if (have_words) ReadWordsFromMemory(data, size, to, bound_, offset);
 }
 
 void MissingUnknown(const Config &config) {

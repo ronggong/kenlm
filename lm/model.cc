@@ -89,6 +89,35 @@ template <class Search, class VocabularyT> GenericModel<Search, VocabularyT>::Ge
   P::Init(begin_sentence, null_context, vocab_, search_.Order());
 }
 
+template <class Search, class VocabularyT> GenericModel<Search, VocabularyT>::GenericModel(const void *data, std::size_t size, const Config &init_config) : backing_(init_config) {
+  if (IsBinaryFormat(data, size)) {
+    Parameters parameters;
+    backing_.InitializeBinaryFromMemory(data, size, kModelType, kVersion, parameters);
+    CheckCounts(parameters.counts);
+
+    Config new_config(init_config);
+    new_config.probing_multiplier = parameters.fixed.probing_multiplier;
+    Search::UpdateConfigFromBinary(backing_, parameters.counts, VocabularyT::Size(parameters.counts[0], new_config), new_config);
+    UTIL_THROW_IF(new_config.enumerate_vocab && !parameters.fixed.has_vocabulary, FormatLoadException, "The decoder requested all the vocabulary strings, but this binary file does not have them.  You may need to rebuild the binary file with an updated version of build_binary.");
+
+    SetupMemory(backing_.LoadBinary(Size(parameters.counts, new_config)), parameters.counts, new_config);
+    vocab_.LoadedBinaryFromMemory(parameters.fixed.has_vocabulary, data, size, new_config.enumerate_vocab, backing_.VocabStringReadingOffset());
+  } else {
+    UTIL_THROW(FormatLoadException, "LoadVirtualFromMemory only supports KenLM binary format");
+  }
+
+  State begin_sentence = State();
+  begin_sentence.length = 1;
+  begin_sentence.words[0] = vocab_.BeginSentence();
+  typename Search::Node ignored_node;
+  bool ignored_independent_left;
+  uint64_t ignored_extend_left;
+  begin_sentence.backoff[0] = search_.LookupUnigram(begin_sentence.words[0], ignored_node, ignored_independent_left, ignored_extend_left).Backoff();
+  State null_context = State();
+  null_context.length = 0;
+  P::Init(begin_sentence, null_context, vocab_, search_.Order());
+}
+
 template <class Search, class VocabularyT> void GenericModel<Search, VocabularyT>::InitializeFromARPA(int fd, const char *file, const Config &config) {
   // Backing file is the ARPA.
   util::FilePiece f(fd, file, config.ProgressMessages());
@@ -340,6 +369,27 @@ base::Model *LoadVirtual(const char *file_name, const Config &config, ModelType 
       return new ArrayTrieModel(file_name, config);
     case QUANT_ARRAY_TRIE:
       return new QuantArrayTrieModel(file_name, config);
+    default:
+      UTIL_THROW(FormatLoadException, "Confused by model type " << model_type);
+  }
+}
+
+base::Model *LoadVirtualFromMemory(const void *data, std::size_t size, const Config &config) {
+  ModelType model_type = PROBING;
+  UTIL_THROW_IF(!RecognizeBinary(data, size, model_type), FormatLoadException, "Memory buffer is not a KenLM binary format");
+  switch (model_type) {
+    case PROBING:
+      return new ProbingModel(data, size, config);
+    case REST_PROBING:
+      return new RestProbingModel(data, size, config);
+    case TRIE:
+      return new TrieModel(data, size, config);
+    case QUANT_TRIE:
+      return new QuantTrieModel(data, size, config);
+    case ARRAY_TRIE:
+      return new ArrayTrieModel(data, size, config);
+    case QUANT_ARRAY_TRIE:
+      return new QuantArrayTrieModel(data, size, config);
     default:
       UTIL_THROW(FormatLoadException, "Confused by model type " << model_type);
   }

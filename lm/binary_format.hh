@@ -24,6 +24,7 @@ extern const char *kModelNames[6];
  * this header designed for use by decoder authors.
  */
 bool RecognizeBinary(const char *file, ModelType &recognized);
+bool RecognizeBinary(const void *data, std::size_t size, ModelType &recognized);
 
 struct FixedWidthParameters {
   unsigned char order;
@@ -51,6 +52,8 @@ class BinaryFormat {
     // Reading a binary file:
     // Takes ownership of fd
     void InitializeBinary(int fd, ModelType model_type, unsigned int search_version, Parameters &params);
+    // Memory-backed binary: does not take ownership of the buffer; caller must keep it alive.
+    void InitializeBinaryFromMemory(const void *data, std::size_t size, ModelType model_type, unsigned int search_version, Parameters &params);
     // Used to read parts of the file to update the config object before figuring out full size.
     void ReadForConfig(void *to, std::size_t amount, uint64_t offset_excluding_header) const;
     // Actually load the binary file and return a pointer to the beginning of the search area.
@@ -73,6 +76,9 @@ class BinaryFormat {
 
   private:
     void MapFile(void *&vocab_base, void *&search_base);
+
+    const uint8_t *external_data_;
+    std::size_t external_size_;
 
     // Copied from configuration.
     const Config::WriteMethod write_method_;
@@ -100,6 +106,7 @@ class BinaryFormat {
 };
 
 bool IsBinaryFormat(int fd);
+bool IsBinaryFormat(const void *data, std::size_t size);
 
 } // namespace ngram
 } // namespace lm
